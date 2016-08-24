@@ -38,21 +38,88 @@ def overlay_effect(color, overlay):
     else:
         return overlay - 133 + color
 
-def make_lego_image(thumbnail_image, brick_image):
+def checkAdjacentPixels(color_matrix, brick_x, brick_y, brick_w, brick_h, currentColor):
+    for processX in range(brick_w):
+        for processY in range(brick_h):
+            # print "%s %s / %s vs. %s" % (brick_x + processX, brick_y + processY, color_matrix[processX][processY], currentColor)
+            try:
+                if color_matrix[brick_x + processX][brick_y + processY] != currentColor:
+                    return False
+            except:
+                return False
+    return True
+
+def make_lego_image(thumbnail_image, brick_image, minimize_bricks_number):
     '''Create a lego version of an image from an image'''
     base_width, base_height = thumbnail_image.size
-    brick_width, brick_height = brick_image.size
+    one_stud_brick_width, one_stud_brick_height = brick_image.size
 
     rgb_image = thumbnail_image.convert('RGB')
 
-    lego_image = Image.new("RGB", (base_width * brick_width,
-                                   base_height * brick_height), "white")
+    lego_image = Image.new("RGB", (base_width * one_stud_brick_width,
+                                   base_height * one_stud_brick_height), "white")
 
+    # we define the bricks we can use, just 1x1 by default, others if the user wants
+    if minimize_bricks_number:
+        bricks_by_size = [
+            [4,2],
+            [2,4],
+            [2,2],
+            [4,1],
+            [1,4],
+            [2,1],
+            [1,2],
+            [1,1],
+        ]
+    else:
+        bricks_by_size = [
+            [1,1],
+        ]
+
+    # We create the color matrix once, will be used afterwards to group bricks
+    color_matrix = []
     for brick_x in range(base_width):
+        column_matrix = []
         for brick_y in range(base_height):
             color = rgb_image.getpixel((brick_x, brick_y))
-            lego_image.paste(apply_color_overlay(brick_image, color),
-                             (brick_x * brick_width, brick_y * brick_height))
+            column_matrix.append(color)
+        color_matrix.append(column_matrix)
+
+    # We then run the "brickification"
+    for brick in bricks_by_size:
+        brick_w = brick[0]
+        brick_h = brick[1]
+        print "Testing brick %sx%s.png" % (brick_w, brick_h)
+
+        brick_path = os.path.join(os.path.dirname(__file__), "assets",
+                          "bricks", "%sx%s.png" % (brick_w, brick_h))
+        if not os.path.isfile(brick_path):
+            print('Brick asset "{0}" was not found.'.format(brick_path))
+            sys.exit(1)
+        brick_image = Image.open(brick_path)
+
+        for brick_x in range(base_width):
+            for brick_y in range(base_height):
+                # print brick_x, brick_y
+                currentColor = color_matrix[brick_x][brick_y]
+
+                if currentColor != None:
+                    sameColor = checkAdjacentPixels(color_matrix, brick_x, brick_y, brick_w, brick_h, currentColor)
+                    if sameColor == True:
+                        # print "\t%s %s matching" % (brick_x, brick_y)
+                        lego_image.paste(apply_color_overlay(brick_image, currentColor),
+                                 (brick_x * one_stud_brick_width, brick_y * one_stud_brick_height))
+
+                        for processX in range(brick_w):
+                            for processY in range(brick_h):
+                                clearX = brick_x + processX
+                                clearY = brick_y + processY
+
+                                # print "\t\tSetting %s,%s to None" % (clearX, clearY)
+                                color_matrix[clearX][clearY] = None
+                    else:
+                        # print "\t%s %s not matching" % (brick_x, brick_y)
+                        pass
     return lego_image
 
 
@@ -130,18 +197,18 @@ def legofy_gif(base_image, brick_image, output_path, size, palette_mode, dither)
     # Make use of images to gif function
     images2gif.writeGif(output_path, frames_converted, duration=original_duration/1000.0, dither=0, subRectangles=False)
 
-def legofy_image(base_image, brick_image, output_path, size, palette_mode, dither):
+def legofy_image(base_image, brick_image, output_path, size, palette_mode, dither, minimize_bricks_number):
     '''Legofy an image'''
     new_size = get_new_size(base_image, brick_image, size)
     base_image.thumbnail(new_size, Image.ANTIALIAS)
     if palette_mode:
         palette = get_lego_palette(palette_mode)
         base_image = apply_thumbnail_effects(base_image, palette, dither)
-    make_lego_image(base_image, brick_image).save(output_path)
+    make_lego_image(base_image, brick_image, minimize_bricks_number).save(output_path)
 
 
 def main(image_path, output_path=None, size=None,
-         palette_mode=None, dither=False):
+         palette_mode=None, dither=False, minimize_bricks_number=False):
     '''Legofy image or gif with brick_path mask'''
     image_path = os.path.realpath(image_path)
     if not os.path.isfile(image_path):
@@ -172,7 +239,7 @@ def main(image_path, output_path=None, size=None,
         if output_path is None:
             output_path = get_new_filename(image_path, '.png')
         print("Static image detected, will now legofy to {0}".format(output_path))
-        legofy_image(base_image, brick_image, output_path, size, palette_mode, dither)
+        legofy_image(base_image, brick_image, output_path, size, palette_mode, dither, minimize_bricks_number)
 
     base_image.close()
     brick_image.close()

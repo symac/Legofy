@@ -17,7 +17,13 @@ from legofy import palettes
 @click.option('--palette', default=None,
               type=click.Choice(palettes.legos().keys()),
               help='Palette to use based on real Lego colors.')
-def main(image, output, size, palette, dither):
+@click.option('--optimize/--no-optimize', default=False,
+              help='Minimize the number of bricks used by using bigger bricks.')
+
+def main(image, output, size, palette, dither, optimize):
     '''Legofy an image!'''
     legofy.main(image, output_path=output, size=size,
-                palette_mode=palette, dither=dither)
+                palette_mode=palette, dither=dither, minimize_bricks_number=optimize)
+
+if __name__ == "__main__":
+  main()
